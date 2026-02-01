@@ -13,7 +13,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from backend.core.pipeline import AuraPipeline
+from backend.backend.core.pipeline import AuraPipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
