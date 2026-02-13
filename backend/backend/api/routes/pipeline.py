@@ -14,6 +14,10 @@ from datetime import datetime
 from pathlib import Path
 
 from backend.backend.core.pipeline import AuraPipeline
+from backend.backend.core.agent.tools import register_dataset, get_dataset
+from backend.backend.core.agent.graph import run_agentic_pipeline
+import pandas as pd
+from langchain_core.messages import BaseMessage
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -85,12 +89,52 @@ async def run_pipeline(
             target_col=target_col
         )
         
-        # Run full pipeline - matching YOUR method signature
-        results = pipeline.run_full_pipeline(
-            test_size=test_size,
-            save_data=True,
-            save_explanations=True
-        )
+        if mode == "agentic":
+            logger.info(f"Job {job_id}: Running in AGENTIC mode")
+            # 1. Load Data
+            df = pd.read_csv(file_path)
+            
+            # 2. Register with Agent Memory
+            register_dataset(job_id, df)
+            
+            # 3. Run Agent
+            agent_output = run_agentic_pipeline(job_id)
+            
+            # 4. Retrieve Results
+            final_df = get_dataset(job_id)
+            
+            # 5. Save Results (Mimic AuraPipeline output)
+            processed_path = file_path.replace(".csv", "_processed.csv")
+            final_df.to_csv(processed_path, index=False)
+            
+            # Extract steps from messages
+            steps_log = []
+            if agent_output and "messages" in agent_output:
+                for m in agent_output["messages"]:
+                     # Only show key decisions or tool outputs
+                    if hasattr(m, "tool_calls") and m.tool_calls:
+                        for tc in m.tool_calls:
+                            steps_log.append(f"Tool Call: {tc['name']}")
+                    elif hasattr(m, "content") and m.content:
+                        # Log shortened content
+                        steps_log.append(str(m.content)[:100])
+
+            results = {
+                "success": True,
+                "processed_data_path": processed_path,
+                "preprocessing_steps": steps_log,
+                "pipeline_info": {"original_shape": df.shape},
+                "report": {"dataset_info": {"processed_shape": final_df.shape}},
+                "model_results": {"results": {"accuracy": "N/A (Agentic Mode)"}}
+            }
+            
+        else:
+            # Run standard pipeline
+            results = pipeline.run_full_pipeline(
+                test_size=test_size,
+                save_data=True,
+                save_explanations=True
+            )
         
         # Organize output files
         output_files = {
